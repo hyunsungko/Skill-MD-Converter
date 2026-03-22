@@ -32,8 +32,18 @@ pip install 'markitdown[all]' # PPT/Word/Excel/PDF → MD 변환
 
 프로젝트 루트에서 문서 파일을 스캔하고 raw Markdown으로 변환합니다.
 
+스크립트 위치를 먼저 찾습니다:
+- 프로젝트 루트에 `convert_docs.py`가 있으면 그것을 사용
+- 없으면 `~/.claude/skills/doc-to-context/convert_docs.py` 사용
+
 ```bash
-python convert_docs.py
+# 스크립트 위치 탐색
+if [ -f convert_docs.py ]; then
+  CONVERTER="convert_docs.py"
+elif [ -f ~/.claude/skills/doc-to-context/convert_docs.py ]; then
+  CONVERTER="$HOME/.claude/skills/doc-to-context/convert_docs.py"
+fi
+python "$CONVERTER" --root .
 ```
 
 - 지원 포맷: HWP, HWPX, PPT, PPTX, DOC, DOCX, XLS, XLSX
@@ -45,12 +55,12 @@ python convert_docs.py
 
 특정 파일만 변환하려면:
 ```bash
-python convert_docs.py "파일명.hwp" "파일명.pptx"
+python "$CONVERTER" "파일명.hwp" "파일명.pptx"
 ```
 
 강제 재변환:
 ```bash
-python convert_docs.py --force
+python "$CONVERTER" --force
 ```
 
 ### Step 2: AI 구조화
@@ -137,18 +147,23 @@ python -c "print(len(open('AI_Context/파일명.md', encoding='utf-8').read()))"
 
 사용자가 새 문서 파일을 추가하고 다시 요청하면:
 
-1. `python convert_docs.py` 재실행 → 변경/신규 파일만 변환
+1. `python "$CONVERTER"` 재실행 → 변경/신규 파일만 변환
 2. 신규 raw MD만 구조화 (기존 구조화 MD는 유지)
 3. _SUMMARY.md 업데이트 (기존 내용 유지 + 신규 추가)
 
 ## 폴더 구조
 
+### 전역 설치 시 (~/.claude/skills/)
+```
+~/.claude/skills/doc-to-context/
+├── SKILL.md                           ← 이 파일
+├── convert_docs.py                    ← 변환 파이프라인 스크립트
+└── hwp_to_pdf_cli.py                  ← HWP→PDF/HWPX 변환 유틸리티
+```
+
+### 실행 시 프로젝트에 생성되는 구조
 ```
 프로젝트 루트/
-├── .claude/skills/doc-to-context/
-│   └── SKILL.md                      ← 이 파일
-├── convert_docs.py                    ← 변환 파이프라인 스크립트
-├── hwp_to_pdf_cli.py                  ← HWP→PDF 변환 유틸리티
 ├── AI_Context/                        ← 자동 생성
 │   ├── 문서1.md                       ← 구조화된 최종 MD
 │   ├── 문서2.md
