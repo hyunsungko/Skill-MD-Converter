@@ -73,6 +73,14 @@ def check_dependencies() -> dict:
         except ImportError:
             missing.append("openpyxl (Excel 변환): pip install 'markitdown[all]'")
 
+    # python-hwpx (HWPX 텍스트 추출 — HWP 변환의 핵심 의존성)
+    try:
+        from hwpx.tools.text_extractor import TextExtractor  # noqa: F401
+        status["hwpx_extractor"] = True
+    except ImportError:
+        status["hwpx_extractor"] = False
+        missing.append("python-hwpx (HWPX 텍스트 추출): pip install python-hwpx")
+
     if missing:
         print("⚠ 일부 의존성 미설치 (해당 포맷 변환 불가):")
         for m in missing:
@@ -259,9 +267,6 @@ def _extract_hwpx_to_md(hwpx_path: str) -> str | None:
         return None
 
     md_name = Path(hwpx_path).stem + ".raw.md"
-    # HWPX 확장자가 이미 포함된 stem에서 원본 이름 복원
-    if md_name.endswith(".hwpx.raw.md"):
-        md_name = md_name.replace(".hwpx.raw.md", ".raw.md")
     md_path = os.path.join(INTERMEDIATE_DIR, md_name)
 
     try:
@@ -338,12 +343,31 @@ def convert_with_markitdown(filepath: str) -> str | None:
 
 
 def _run_with_timeout(func, timeout: int) -> bool:
-    """함수를 타임아웃과 함께 실행. Windows에서는 signal 대신 직접 실행."""
-    try:
-        return func()
-    except Exception as e:
-        print(f"  오류: 변환 실패 - {str(e)}")
+    """함수를 타임아웃과 함께 실행. 별도 스레드에서 실행하여 타임아웃 적용."""
+    import threading
+
+    result = [False]
+    error = [None]
+
+    def target():
+        try:
+            result[0] = func()
+        except Exception as e:
+            error[0] = e
+
+    thread = threading.Thread(target=target)
+    thread.start()
+    thread.join(timeout=timeout)
+
+    if thread.is_alive():
+        print(f"  오류: 타임아웃 ({timeout}초) — 변환이 응답하지 않습니다.")
         return False
+
+    if error[0]:
+        print(f"  오류: 변환 실패 - {str(error[0])}")
+        return False
+
+    return result[0]
 
 
 # ── 메인 파이프라인 ──────────────────────────────────────
