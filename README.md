@@ -45,6 +45,7 @@ https://github.com/hyunsungko/Skill-MD-Converter
 
 #### Step 1: 의존성 설치
 
+**Linux / macOS / WSL:**
 ```bash
 # docling (PDF/PPT/Word/Excel 변환) — 필수
 pip install docling
@@ -54,18 +55,26 @@ pip install pyhwpx
 pip install python-hwpx
 
 # 이미지 fallback용 (선택)
-sudo apt install poppler-utils    # pdftoppm
+sudo apt install poppler-utils        # pdftoppm
 sudo apt install libreoffice-impress  # PPTX→PDF 변환
 ```
 
-> **참고:** docling은 PyTorch 기반이라 설치 용량이 큽니다 (~수GB). GPU가 있으면 OCR 속도가 빨라지지만 CPU에서도 동작합니다.
+**Windows (네이티브):**
+```powershell
+# docling — Windows에서도 pip으로 바로 설치 가능
+pip install docling
 
-> **venv 사용 권장:** 시스템 Python과 충돌을 피하려면 가상환경을 만들어 설치하세요.
-> ```bash
-> python3 -m venv ~/docling-env
-> source ~/docling-env/bin/activate
-> pip install docling
-> ```
+# HWP 변환 (한글 프로그램 설치 필수)
+pip install pyhwpx
+pip install python-hwpx
+```
+
+> **Windows 참고사항:**
+> - docling은 Windows 네이티브에서 정상 동작합니다 (WSL 불필요)
+> - Windows에서는 WMF 이미지 처리가 지원되어 한글/PPT 파일 변환 시 오히려 유리합니다
+> - GPU 사용 시 CUDA 버전에 맞는 PyTorch를 별도 설치하세요
+
+> **참고:** docling은 PyTorch 기반이라 설치 용량이 큽니다 (~수GB). GPU가 있으면 OCR 속도가 빨라지지만 CPU에서도 동작합니다.
 
 #### Step 2: Skill 파일 설치
 
@@ -170,7 +179,7 @@ python convert_docs.py file1.hwp file2.docx report.pdf
 
 | 항목 | 최소 | 권장 |
 |------|------|------|
-| **OS** | Linux, macOS, Windows (WSL) | Ubuntu 24.04 (WSL 2) |
+| **OS** | Linux, macOS, Windows (네이티브/WSL 모두) | Ubuntu 24.04 (WSL 2) 또는 Windows 11 |
 | **Python** | 3.10+ | 3.12 |
 | **RAM** | 4GB | 8GB+ |
 | **GPU** | 불필요 (CPU 동작) | NVIDIA GPU (OCR 가속) |
