@@ -1,12 +1,13 @@
 ---
 name: doc-to-context
 description: |
-  프로젝트 루트의 문서 파일(HWP, HWPX, PPT, PPTX, DOC, DOCX, XLS, XLSX)을
+  프로젝트 루트의 문서 파일(PDF, HWP, HWPX, PPT, PPTX, DOC, DOCX, XLS, XLSX)을
   AI가 읽기 쉬운 구조화된 Markdown으로 변환하고 AI_Context/ 폴더에 정리하는 skill.
+  변환 백엔드로 docling (IBM Research)을 사용합니다.
   Use when: 사용자가 "문서 변환", "context 정리", "MD 변환", "HWP 변환",
   "문서를 마크다운으로", "AI가 읽을 수 있게", "context 만들어",
   "새 문서 추가했어", "문서 파일 넣었어" 등을 언급할 때 사용.
-  Also use when: 프로젝트에 .hwp, .pptx, .docx, .xlsx 파일이 있고
+  Also use when: 프로젝트에 .pdf, .hwp, .pptx, .docx, .xlsx 파일이 있고
   사용자가 해당 파일의 내용을 파악하거나 활용하려 할 때.
 ---
 
@@ -21,7 +22,7 @@ description: |
 ```bash
 pip install pyhwpx          # HWP 변환 (Windows + 한글 설치 필요)
 pip install python-hwpx     # HWPX 텍스트 추출 (표 구조 보존)
-pip install 'markitdown[all]' # PPT/Word/Excel/PDF → MD 변환
+pip install docling            # PDF/PPT/Word/Excel → MD 변환 (docling, IBM Research)
 ```
 
 ## 실행 순서
@@ -46,10 +47,10 @@ fi
 python "$CONVERTER" --root .
 ```
 
-- 지원 포맷: HWP, HWPX, PPT, PPTX, DOC, DOCX, XLS, XLSX
+- 지원 포맷: PDF, HWP, HWPX, PPT, PPTX, DOC, DOCX, XLS, XLSX
 - HWP/HWPX → HWPX → TextExtractor (pyhwpx + python-hwpx, 표 구조 보존)
-  - HWPX 변환 실패 시 PDF 경유 fallback (pyhwpx + markitdown)
-- PPT/Word/Excel → MD (markitdown 직접)
+  - HWPX 변환 실패 시 PDF 경유 fallback (pyhwpx + docling)
+- PDF/PPT/Word/Excel → MD (docling 직접)
 - 증분 처리: _manifest.json으로 SHA256 비교, 변경된 파일만 변환
 - 결과: `AI_Context/_intermediate/` 에 raw MD 파일 저장
 
@@ -80,6 +81,26 @@ convert_docs.py 실행 후, `AI_Context/_intermediate/` 에 생성된 각 raw MD
 - H1/H2 섹션 단위로 분할하여 순차적으로 읽고 처리
 - 각 섹션을 구조화한 뒤 하나의 파일로 합쳐서 저장
 
+**raw MD가 `<!-- image -->` 플레이스홀더만 포함된 경우 (이미지 전용 슬라이드):**
+
+docling이 텍스트를 추출하지 못하고 `<!-- image -->` 태그만 나열한 경우,
+원본이 이미지 기반 슬라이드(텍스트 레이어 없음)일 가능성이 높습니다.
+이 경우 다음 fallback 절차를 수행합니다:
+
+1. LibreOffice로 원본 PPTX/PPT를 PDF로 변환:
+   ```bash
+   libreoffice --headless --convert-to pdf "원본파일.pptx"
+   ```
+2. pdftoppm으로 PDF를 페이지별 이미지로 변환:
+   ```bash
+   pdftoppm -jpeg -r 150 "원본파일.pdf" "AI_Context/_intermediate/원본파일_page"
+   ```
+3. Read tool로 각 페이지 이미지를 직접 읽어 내용을 파악
+4. 파악한 내용을 구조화된 Markdown으로 작성하여 저장
+
+이 fallback은 PPTX/PPT 파일에만 적용합니다.
+PDF나 DOCX 등 다른 포맷에서 빈 출력이 나오면 변환 실패로 처리합니다.
+
 ### 구조화 원칙
 
 변환 시 반드시 지켜야 할 규칙들:
@@ -90,7 +111,7 @@ convert_docs.py 실행 후, `AI_Context/_intermediate/` 에 생성된 각 raw MD
 3. **제목 계층**: 원본의 제목 계층 구조 유지 (H1 → H2 → H3)
 4. **리스트 보존**: 번호 매기기, 불릿 포인트 등 리스트 구조 보존
 5. **내용 추가 금지**: 원본에 없는 내용을 추가하지 않음
-6. **불필요한 요소 제거**: markitdown이 생성한 불필요한 메타데이터, 깨진 문자, 의미 없는 기호 등은 정리
+6. **불필요한 요소 제거**: 변환 도구가 생성한 불필요한 메타데이터, 깨진 문자, 의미 없는 기호 등은 정리
 
 ### Step 3: 정량적 검증
 

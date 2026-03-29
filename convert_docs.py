@@ -1,7 +1,11 @@
 """
 Document-to-Context Converter
-프로젝트 루트의 문서 파일(HWP, PPTX, DOCX, XLSX)을 Markdown으로 변환하고
+프로젝트 루트의 문서 파일(HWP, PPTX, DOCX, XLSX, PDF)을 Markdown으로 변환하고
 AI_Context/ 폴더에 구조화된 결과를 저장하는 파이프라인 오케스트레이터.
+
+변환 백엔드: docling (IBM Research)
+- PDF, PPTX, DOCX, XLSX, HTML, 이미지 등 지원
+- AI 기반 레이아웃 분석, 테이블 구조 보존, OCR 내장
 
 Usage:
     python convert_docs.py                    # 프로젝트 루트 스캔 및 변환
@@ -25,7 +29,7 @@ if sys.platform == "win32":
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 # ── 설정 ────────────────────────────────────────────────
-SUPPORTED_EXTENSIONS = {'.hwp', '.hwpx', '.pptx', '.ppt', '.docx', '.doc', '.xlsx', '.xls'}
+SUPPORTED_EXTENSIONS = {'.hwp', '.hwpx', '.pptx', '.ppt', '.docx', '.doc', '.xlsx', '.xls', '.pdf'}
 HWP_EXTENSIONS = {'.hwp', '.hwpx'}
 OUTPUT_DIR = "AI_Context"
 INTERMEDIATE_DIR = os.path.join(OUTPUT_DIR, "_intermediate")
@@ -36,7 +40,7 @@ HWP_TIMEOUT_SECONDS = 120
 # ── 의존성 검사 ─────────────────────────────────────────
 def check_dependencies() -> dict:
     """의존성 설치 상태 확인. 포맷별 지원 여부를 반환."""
-    status = {"hwp": False, "pptx": False, "docx": False, "xlsx": False, "markitdown": False}
+    status = {"hwp": False, "pptx": False, "docx": False, "xlsx": False, "docling": False}
     missing = []
 
     # pyhwpx (HWP 변환)
@@ -46,32 +50,17 @@ def check_dependencies() -> dict:
     except ImportError:
         missing.append("pyhwpx (HWP 변환): pip install pyhwpx")
 
-    # markitdown (PPT/Word/Excel/PDF 변환)
+    # docling (PPT/Word/Excel/PDF 변환)
     try:
-        import markitdown  # noqa: F401
-        status["markitdown"] = True
+        from docling.document_converter import DocumentConverter  # noqa: F401
+        status["docling"] = True
     except ImportError:
-        missing.append("markitdown (문서→MD 변환): pip install 'markitdown[all]'")
+        missing.append("docling (문서→MD 변환): pip install docling")
 
-    # markitdown extras 개별 확인
-    if status["markitdown"]:
-        try:
-            import pptx  # noqa: F401
-            status["pptx"] = True
-        except ImportError:
-            missing.append("python-pptx (PPT 변환): pip install 'markitdown[all]'")
-
-        try:
-            import mammoth  # noqa: F401
-            status["docx"] = True
-        except ImportError:
-            missing.append("mammoth (Word 변환): pip install 'markitdown[all]'")
-
-        try:
-            import openpyxl  # noqa: F401
-            status["xlsx"] = True
-        except ImportError:
-            missing.append("openpyxl (Excel 변환): pip install 'markitdown[all]'")
+    # docling이 설치되면 모든 포맷 지원
+    status["pptx"] = status["docling"]
+    status["docx"] = status["docling"]
+    status["xlsx"] = status["docling"]
 
     # python-hwpx (HWPX 텍스트 추출 — HWP 변환의 핵심 의존성)
     try:
@@ -217,7 +206,7 @@ def convert_hwp_to_md(hwp_path: str, hwp_instance=None) -> str | None:
             timeout=HWP_TIMEOUT_SECONDS,
         )
         if fb_success and os.path.exists(pdf_path):
-            return convert_with_markitdown(pdf_path)
+            return convert_with_docling(pdf_path)
         return None
 
     # HWPX → raw MD (TextExtractor)
@@ -296,49 +285,24 @@ def _extract_hwpx_to_md(hwpx_path: str) -> str | None:
         return None
 
 
-def convert_with_markitdown(filepath: str) -> str | None:
-    """markitdown CLI로 파일을 raw MD로 변환. 성공 시 raw MD 경로 반환."""
+def convert_with_docling(filepath: str) -> str | None:
+    """docling으로 파일을 raw MD로 변환. 성공 시 raw MD 경로 반환."""
     os.makedirs(INTERMEDIATE_DIR, exist_ok=True)
-
     md_name = Path(filepath).stem + ".raw.md"
     md_path = os.path.join(INTERMEDIATE_DIR, md_name)
-
     try:
-        # markitdown CLI 또는 python -m markitdown 으로 실행
-        env = os.environ.copy()
-        env["PYTHONIOENCODING"] = "utf-8"
-        result = subprocess.run(
-            [sys.executable, "-m", "markitdown", filepath],
-            capture_output=True,
-            timeout=120,
-            env=env,
-        )
-
-        if result.returncode != 0:
-            stderr_text = result.stderr.decode("utf-8", errors="replace").strip()
-            print(f"  오류: markitdown 실패 - {stderr_text}")
-            return None
-
-        # 출력 디코딩 (UTF-8 우선, 실패 시 cp949)
-        try:
-            content = result.stdout.decode("utf-8")
-        except UnicodeDecodeError:
-            content = result.stdout.decode("cp949", errors="replace")
-
+        from docling.document_converter import DocumentConverter
+        converter = DocumentConverter()
+        result = converter.convert(filepath)
+        content = result.document.export_to_markdown()
         if not content or not content.strip():
-            print(f"  오류: markitdown 출력이 비어있습니다 - {filepath}")
+            print(f"  오류: docling 출력이 비어있습니다 - {filepath}")
             return None
-
         with open(md_path, "w", encoding="utf-8") as f:
             f.write(content)
-
         return md_path
-
-    except subprocess.TimeoutExpired:
-        print(f"  오류: markitdown 타임아웃 (120초) - {filepath}")
-        return None
     except Exception as e:
-        print(f"  오류: markitdown 실행 실패 - {str(e)}")
+        print(f"  오류: docling 변환 실패 - {str(e)}")
         return None
 
 
@@ -442,24 +406,10 @@ def run_pipeline(root_dir: str, scan_only: bool = False, force: bool = False,
                 results["skipped"].append(filename)
                 continue
 
-            if ext in {'.pptx', '.ppt'} and not dep_status["pptx"]:
-                print("  건너뜀: python-pptx 미설치")
+            if ext in {'.pptx', '.ppt', '.docx', '.doc', '.xlsx', '.xls', '.pdf'} and not dep_status.get("docling"):
+                print("  건너뜀: docling 미설치")
                 _update_manifest_entry(manifest, filename, filepath, status="skipped",
-                                       error="python-pptx 미설치")
-                results["skipped"].append(filename)
-                continue
-
-            if ext in {'.docx', '.doc'} and not dep_status["docx"]:
-                print("  건너뜀: mammoth 미설치")
-                _update_manifest_entry(manifest, filename, filepath, status="skipped",
-                                       error="mammoth 미설치")
-                results["skipped"].append(filename)
-                continue
-
-            if ext in {'.xlsx', '.xls'} and not dep_status["xlsx"]:
-                print("  건너뜀: openpyxl 미설치")
-                _update_manifest_entry(manifest, filename, filepath, status="skipped",
-                                       error="openpyxl 미설치")
+                                       error="docling 미설치")
                 results["skipped"].append(filename)
                 continue
 
@@ -468,7 +418,7 @@ def run_pipeline(root_dir: str, scan_only: bool = False, force: bool = False,
             if ext in HWP_EXTENSIONS:
                 raw_md_path = convert_hwp_to_md(filepath, hwp_instance=hwp_instance)
             else:
-                raw_md_path = convert_with_markitdown(filepath)
+                raw_md_path = convert_with_docling(filepath)
 
             if raw_md_path and os.path.exists(raw_md_path):
                 file_hash = compute_sha256(filepath)

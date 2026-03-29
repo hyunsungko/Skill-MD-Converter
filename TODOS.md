@@ -1,9 +1,13 @@
 # TODOS
 
-## v2: pyhwpx 직접 텍스트 추출 경로 검토
-- **What:** pyhwpx에서 HWP 파일의 텍스트를 직접 추출하는 방법 조사. 현재 HWP→PDF→MD 3단계를 HWP→MD 2단계로 줄일 수 있음.
-- **Why:** PDF 중간 변환에서 표 구조/서식 손실이 발생. 직접 추출하면 변환 품질 향상 가능.
-- **Pros:** 변환 품질 향상, 속도 개선 (PDF 생성 건너뛰), 중간 파일 불필요.
-- **Cons:** pyhwpx API 탐색 필요. 사용자가 직접 시도했을 때 품질이 좋지 않았음.
-- **Context:** pyhwpx는 COM 기반이라 GetText() 같은 API가 있을 수 있음. 표나 특수 서식의 추출 품질을 PDF 경유와 비교 테스트 필요. **v1 완성 후 별도 브랜치에서 충분한 테스트 후 품질 기준 통과 시 머지.**
-- **Depends on:** v1 완성
+## v2 완료 (2026-03-29)
+- [x] markitdown → docling 백엔드 교체
+- [x] PDF 포맷 지원 추가
+- [x] 이미지 전용 PPTX fallback (LibreOffice → pdftoppm → AI 비전)
+- [x] 품질 테스트 통과 (PDF, PPTX, XLSX, DOCX)
+- [x] README 보강 (설치 가이드, 활용 가이드, 품질 비교)
+
+## v3: 검토 사항
+- **docling DocumentConverter 재사용:** 현재 변환할 때마다 DocumentConverter()를 새로 생성. 여러 파일 배치 변환 시 인스턴스 재사용으로 모델 로딩 시간 절약 가능.
+- **OCR 언어 설정:** docling OCR 엔진의 언어 설정을 사용자가 커스터마이즈할 수 있도록 옵션 추가 검토.
+- **venv 자동 감지:** docling이 venv에 설치된 경우 자동 감지하여 활성화하는 로직 추가 검토.
